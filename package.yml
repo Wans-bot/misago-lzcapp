@@ -1,0 +1,72 @@
+package: cloud.lazycat.app.misago
+version: 0.39.6-16
+name: Misago 论坛
+description: 功能完整、界面现代的自托管社区论坛系统，支持板块主题、用户组权限、Markdown 与搜索
+author: Rafal Piątkowski
+license: GPL-2.0
+homepage: https://misago-project.org
+min_os_version: 1.6.0
+
+permissions:
+  required:
+    - net.lan
+
+locales:
+  zh-CN:
+    name: Misago 论坛
+    description: 功能完整、界面现代的自托管社区论坛系统，支持板块主题、用户组权限、Markdown 与搜索。
+    usage: |
+      Misago 是一套运行在你微服上的社区论坛软件，用于搭建讨论区、问答社区或兴趣小组。界面现代、搜索快，支持完整的中文界面。
+
+      审核账号（应用自身的登录，与微服账号无关）：
+      - 用户名：admin
+      - 密码：JkJ5FprCDs8jMwJJ
+
+      正常情况下不需要手动输入：打开应用会自动登录管理员账号（数据库初始化与管理员创建由安装脚本自动完成）。若你手动退出了登录，用上面的账号密码即可重新进入。
+
+      首次使用：
+      1. 打开应用即已登录管理员账号，论坛即刻可用。
+      2. 论坛已内置「综合讨论 / 公告中心 / 使用帮助 / 建议反馈」示例版块与展示主题，可直接发帖体验；
+         也可在「管理后台」里修改或删除它们。
+      3. 在「管理后台」里创建自己的板块（分类）与用户组；用户可在个人设置里修改昵称、头像、签名，
+         并接收站内私信与通知。
+
+      主要功能：
+      - 板块与话题管理，支持置顶、锁定、移动、合并；
+      - 用户组与权限系统，可限制发帖、附件、签名等；
+      - Markdown 编辑器，支持代码块、表格、图片与附件上传；
+      - 全文搜索、话题订阅、@提及、点赞；
+      - 站内私信、通知中心、邮件提醒；
+      - 后台管理：用户、板块、菜单、社交登录、任务队列、站点设置。
+
+      说明：
+      - 所有论坛数据（用户、帖子、附件）保存在微服本机数据目录，重启和升级都不会丢失。
+      - 应用入口的访问由微服账号体系负责；论坛自身的登录会自动完成，打开即用。
+  en-US:
+    name: Misago Forum
+    description: A full-featured, modern self-hosted forum with categories, threads, group permissions, Markdown and search.
+    usage: |
+      Misago is a community forum that runs entirely on your box, for discussion boards, Q&A communities or interest groups. The interface is modern and search is fast, with a complete Chinese UI.
+
+      Review account (the app's own login, unrelated to your box account):
+      - Username: admin
+      - Password: JkJ5FprCDs8jMwJJ
+
+      Normally you do not need to type it: opening the app signs you in automatically as the administrator (database initialization and administrator creation run automatically at install time). If you sign out manually, use the username and password above to get back in.
+
+      Getting started:
+      1. Open the app; you are already signed in as the administrator and the forum is ready to use.
+      2. Sample categories (General, Announcements, Help, Feedback) and demo threads are included so you can try posting right away; edit or delete them in the admin panel.
+      3. Create your own categories and threads in the admin panel; users can change their nickname, avatar and signature, and receive private messages and notifications.
+
+      Features:
+      - Category and thread management with pin, lock, move and merge;
+      - Groups and a permission system to restrict posting, attachments and signatures;
+      - Markdown editor with code blocks, tables, images and file attachments;
+      - Full-text search, thread subscription, @mentions and likes;
+      - Private messages, notification center and email alerts;
+      - Admin panel: users, categories, menus, social login, task queue and site settings.
+
+      Notes:
+      - All forum data (users, posts, attachments) is stored in the app data directory on your box and survives restarts and upgrades.
+      - The app entry is protected by the box account system; the forum's own login is completed automatically, so the app is ready to use on open.

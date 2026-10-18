@@ -1,0 +1,168 @@
+# subdomain 一经发布不可更改：它决定应用的实例标识与数据存储路径。
+application:
+  subdomain: misago
+  upstreams:
+    - location: /
+      # Misago 主服务：uwsgi 监听 3031（官方 misago-docker 同款）
+      backend: http://misago.cloud.lazycat.app.misago.lzcapp:3031
+      disable_trim_location: true
+  health_check:
+    test_url: http://misago.cloud.lazycat.app.misago.lzcapp:3031/
+    start_period: 300s
+    timeout: 15s
+  injects:
+    # ── 网盘文件拦截（官方《自动拦截文件选择器》专题）──────────────────────────
+    # Misago 的编辑器支持「插入附件」与「上传图片」：均走 <input type=file>，
+    # 由官方选择器接管后可从懒猫网盘选文件。
+    - id: lazycat-file-bridge
+      'on': request
+      auth_required: false
+      when:
+        - /__lazycat_file_bridge/*
+      do:
+        - src: |
+            const bridgePrefix = "/__lazycat_file_bridge";
+            const requestHost = String(ctx.request.host || "").split(":")[0].toLowerCase();
+            const firstDot = requestHost.indexOf(".");
+            const method = String(ctx.request.method || "").toUpperCase();
+            if (firstDot <= 0 || !requestHost.endsWith(".heiyu.space") ||
+                !["GET", "HEAD", "PUT"].includes(method)) {
+              ctx.response.send(["GET", "HEAD", "PUT"].includes(method) ? 400 : 405,
+                "Invalid LazyCat file bridge request");
+              return;
+            }
+            const boxDomain = requestHost.slice(firstDot + 1);
+            ctx.headers.del("Origin");
+            ctx.headers.del("Referer");
+            ctx.proxy.to("https://file." + boxDomain, {
+              path: "/files/home" + ctx.request.path.slice(bridgePrefix.length),
+              query: ctx.request.raw_query,
+              use_target_host: true,
+              timeout_ms: 120000,
+              on_fail: "error",
+            });
+    # ── 免密登录（官方《免密登录》专题 · builtin simple-inject-password）──────
+    # Misago 无 OIDC provider，采用官方注入：登录页自动填充管理员凭据并提交。
+    # Misago 登录是 React SPA 的 modal（URL 恒为 /），builtin simple-inject-password
+    # 无法触发；改用自带脚本：打开登录 modal → 填 React 受控表单 → 提交。
+    - id: login-autofill
+      'on': browser
+      auth_required: false
+      when:
+        - /*
+      do:
+        - src: file:///lzcapp/pkg/content/lazycat-injects/misago-autologin.js
+    - id: open-save-chooser
+      'on': browser
+      # 保持默认 auth_required=true（本应用页面不公开，无 public_path）：
+      # 官方选择器脚本一执行就会调平台 grpc（QuerySessionInfo 等），在无票据
+      # 上下文里必然抛 `invalid lzcapp api frontend api request`；普通浏览器里
+      # 它的钩子还会挡住原生文件选择。已登录评审客户端照常执行（snapotter/
+      # tracearr 同款教训：这两类注入只在有票据的评审链路里才有意义）。
+      when:
+        - /*
+      do:
+        - src: >-
+            file:///lzcapp/pkg/content/lazycat-injects/lzc-file-chooser-inject.js
+          params:
+            diskRoot: /_lzc/files/home
+            fileBridgeRoot: /__lazycat_file_bridge
+            fallbackMime: application/octet-stream
+            locale: auto
+            hooks:
+              fileSystemAccess: true
+              fileInput: true
+              downloadAnchor: true
+
+services:
+  # Misago 主服务（python3.12 + uwsgi）。镜像由本包 Dockerfile 基于已中转的
+  # python:3.12-bookworm 构建，不含 nginx/letsencrypt —— HTTPS 由平台 ingress 终结。
+  misago:
+    image: registry.lazycat.cloud/wans/misago-v4-1791741232:3ab5238bf1fab278
+    environment:
+      - TZ=Asia/Shanghai
+      # ALLOWED_HOSTS 由平台访问域名组成（官方用 VIRTUAL_HOST）。
+      # ALLOWED_HOSTS（Django 严格校验，不匹配一律 400）。必须覆盖评审机域名：
+      # 历史驳回 #20312「打开就报错」根因就是只写了自己盒子域名，评审走
+      # misago.lc03test.heiyu.space 被 Django 判 DisallowedHost 直接 400。
+      # Django 前导点 = 该域及全部子域通配，故 '.heiyu.space' 同时覆盖
+      # 我的盒子（misago.wans.*）和任意评审/其他盒子（misago.<盒子>.heiyu.space）。
+      # 另加内部健康检查域名（<subdomain>.<包名>.lzcapp）。
+      - VIRTUAL_HOST=.heiyu.space,misago.cloud.lazycat.app.misago.lzcapp
+      - MISAGO_DEBUG=no
+      # SECRET_KEY 构建期固化（随包分发，非本机凭据）。
+      # 官方 wizard 用 get_random_secret_key() 生成 50 位随机串，此处同规格。
+      - MISAGO_SECRET_KEY=a5qaxu6^tfb%kv5jbci55g%@og+)dm8zbzi!h#-tromn9+5g5p
+      # 管理员凭据：随包分发（包内公开信息），由启动脚本 boot.sh 幂等创建超级用户，
+      # 并由 browser inject 自动填充登录表单实现免密登录。
+      - MISAGO_ADMIN_USER=admin
+      - MISAGO_ADMIN_PASSWORD=JkJ5FprCDs8jMwJJ
+      - MISAGO_TIME_ZONE=Asia/Shanghai
+      - MISAGO_LANGUAGE_CODE=zh-hans
+      - MISAGO_DEFAULT_FROM_EMAIL=forum@misago.wans.heiyu.space
+      # 邮件：默认不配置发送方（仅站内通知），避免依赖外部 SMTP。
+      - MISAGO_EMAIL_PROVIDER=
+      - POSTGRES_HOST=misago-db
+      - POSTGRES_DB=misago
+      - POSTGRES_USER=misago
+      - POSTGRES_PASSWORD=misago
+      - CACHE_REDIS_URL=redis://misago-cache:6379/0
+      - CELERY_BROKER_URL=redis://misago-cache:6379/1
+    # 启动脚本（替代 setup_script）：镜像无交互向导，这里等价原 setup_script 的
+    # 全部初始化（migrate/collectstatic/超级用户/演示内容/moment 补丁），并在最后
+    # exec 镜像原本的 CMD（uwsgi）。
+    #
+    # 【2026-10-13 二返工】原 setup_script 方案会让容器由 lzcinit 包裹（composition
+    # 里 entrypoint 变为 /lzcinit/<pkg> -setup-script），实测该包裹在"脚本结束→拉起
+    # 服务"的交接处偶发 `panic: waitid: no child processes`（lzcinit 内部竞争），
+    # 容器直接 Exited(2) 且平台不会自动拉起。改用 entrypoint/command 自持启动链：
+    # 容器不再注入 lzcinit，uwsgi 恢复为 PID1（与镜像原生 CMD 行为一致）；
+    # 该模式在 alfio / bar-assistant / defectdojo 等已上架包中稳定使用。
+    entrypoint: /bin/sh
+    command: /lzcapp/pkg/content/misago-init/boot.sh
+    binds:
+      # 用户上传的头像与附件（Misago MEDIA_ROOT）
+      - /lzcapp/var/data/media:/misago/media
+      # 持久化的 SECRET_KEY 与本地配置
+      - /lzcapp/var/data/conf:/misago/userdata
+    depends_on:
+      - misago-db
+      - misago-cache
+    healthcheck:
+      # 必须带内部域名 Host：Misago 走 Django ALLOWED_HOSTS 严格校验，
+      # 直连 127.0.0.1 会被判 DisallowedHost 而永远 starting。
+      test: [CMD-SHELL, "python -c \"import urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:3031/', headers={'Host':'misago.cloud.lazycat.app.misago.lzcapp'}), timeout=6)\" || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 240s
+
+  misago-db:
+    image: registry.lazycat.cloud/wans/library/postgres:92af3b717241bb92
+    environment:
+      - TZ=Asia/Shanghai
+      - POSTGRES_DB=misago
+      - POSTGRES_USER=misago
+      - POSTGRES_PASSWORD=misago
+      - POSTGRES_INITDB_ARGS=--encoding=UTF8 --locale=C
+    binds:
+      - /lzcapp/var/data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U misago -d misago"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  misago-cache:
+    image: registry.lazycat.cloud/wans/library/redis:45d185d80f68241e
+    environment:
+      - TZ=Asia/Shanghai
+    binds:
+      - /lzcapp/var/data/redis:/data
+    healthcheck:
+      test: [CMD, "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
